@@ -1,0 +1,49 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+ENV/
+env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Streamlit / temp
+*.log
+*.tmp
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Sensitive / local config
+.env
+*.key
+*.pem
+
+# Generated videos and outputs
+generated_videos_*/
+*.mp4
+*.m4a
+
+# Other local files
+api_spending_log.json
+workflow.txt
+
+# Ignore python wheel caches
+pip-wheel-metadata/
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
