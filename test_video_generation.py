@@ -6,6 +6,7 @@ Simple test to verify Veo 3.1 video generation is working
 
 import os
 import time
+import argparse
 from datetime import datetime
 from video_prompt_generator import VideoPromptGenerator
 
@@ -51,9 +52,11 @@ def test_video_generation_setup():
         
         # Test GenAI client
         print("🤖 Initializing GenAI client...")
+        # Use GENAI_PROJECT env var if set, otherwise fall back to default
+        project_id = os.environ.get('GENAI_PROJECT', 'gen-lang-client-0207694487')
         client = genai.Client(
             vertexai=True,
-            project="gen-lang-client-0207694487",
+            project=project_id,
             location="us-central1"
         )
         print("✅ GenAI client initialized successfully")
@@ -92,17 +95,21 @@ def test_single_video_generation(prompt: str):
     print("=" * 50)
     print("⚠️ This will use real API credits (~$0.75)")
     
-    proceed = input("Do you want to proceed with video generation? (y/n): ").strip().lower()
-    
-    if proceed != 'y':
-        print("❌ Video generation test skipped by user")
-        return None
+    # Respect AUTO_APPROVE env var or CLI flag
+    auto_approve = os.environ.get('AUTO_APPROVE', '0') == '1' or getattr(test_single_video_generation, 'auto_yes', False)
+    if not auto_approve:
+        proceed = input("Do you want to proceed with video generation? (y/n): ").strip().lower()
+        if proceed != 'y':
+            print("❌ Video generation test skipped by user")
+            return None
     
     try:
         from integrated_video_workflow import IntegratedVideoWorkflow
         
         # Initialize workflow without debugger for testing
-        workflow = IntegratedVideoWorkflow(enable_debugger=False)
+        # Allow forcing project via GENAI_PROJECT env var or CLI arg
+        project_override = getattr(test_single_video_generation, 'project_id', None)
+        workflow = IntegratedVideoWorkflow(enable_debugger=False, project_id=project_override)
         
         print("🚀 Initializing video generation clients...")
         if not workflow.initialize_clients():

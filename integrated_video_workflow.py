@@ -27,6 +27,10 @@ from google.genai.types import GenerateVideosConfig, Image
 from google.cloud import storage
 from google.api_core.exceptions import NotFound
 
+# Credential handling for Google ADC
+import google.auth
+from google.auth.transport.requests import Request
+
 # Video processing imports
 from moviepy.editor import VideoFileClip, concatenate_videoclips, CompositeVideoClip
 from merge import merge_videos
@@ -37,7 +41,7 @@ class IntegratedVideoWorkflow:
     Prompt Generation -> Video Generation -> Video Merging
     """
     
-    def __init__(self, project_dir: str = None, enable_debugger: bool = True):
+    def __init__(self, project_dir: str = None, enable_debugger: bool = True, project_id: str = None):
         """Initialize the integrated workflow."""
         # Setup directories
         self.project_dir = project_dir or r"E:\AsapStudio\Ai_Video_Workflow"
@@ -53,6 +57,10 @@ class IntegratedVideoWorkflow:
         # Video generation settings
         self.gcs_input_uri = "gs://abd756/shared image.jpg"  # Your existing image
         self.gcs_output_base = "gs://abd756/veo_output/"
+
+        # Preferred GenAI / Vertex project id (can be forced via constructor or env var 'GENAI_PROJECT')
+        # If not provided, ADC project will be used when initializing clients.
+        self.project_id = project_id or os.environ.get('GENAI_PROJECT')
         
         # Initialize components
         self.prompt_generator = None
@@ -74,16 +82,47 @@ class IntegratedVideoWorkflow:
             
             # Initialize prompt generator
             self.prompt_generator = VideoPromptGenerator()
-            
-            # Initialize GenAI client
+            # Validate Application Default Credentials (ADC)
+            try:
+                creds, adc_project = google.auth.default()
+            except Exception as e:
+                raise RuntimeError(
+                    "Unable to obtain Application Default Credentials. "
+                    "Set the environment variable `GOOGLE_APPLICATION_CREDENTIALS` to a service account JSON file, "
+                    "or run `gcloud auth application-default login`. "
+                    f"Original error: {e}"
+                )
+
+            # Try to refresh credentials if they are expired/not valid
+            try:
+                if not getattr(creds, "valid", False):
+                    creds.refresh(Request())
+            except Exception as e:
+                # Common failure: user credentials expired or revoked (invalid_grant)
+                raise RuntimeError(
+                    "Google credentials could not be refreshed - they may be expired or revoked.\n"
+                    "Remediation options:\n"
+                    "1) Use a service account JSON and set `GOOGLE_APPLICATION_CREDENTIALS` to its path.\n"
+                    "   Example (PowerShell): $env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\\path\\to\\service-account.json'\n"
+                    "   Or set permanently: setx GOOGLE_APPLICATION_CREDENTIALS 'C:\\path\\to\\service-account.json'\n"
+                    "2) If using user ADC, run: `gcloud auth application-default login` to refresh ADC credentials.\n"
+                    "3) Or run: `gcloud auth login --update-adc` to update ADC from your gcloud login.\n"
+                    f"Original error: {e}"
+                )
+
+            # Initialize GenAI client (Vertex AI integration)
+            # genai.Client will use ADC from environment if available.
+            # If you need to override project/location, pass them here.
+            # Determine which project to use for GenAI/Vertex
+            chosen_project = self.project_id or adc_project or "gen-lang-client-0207694487"
             self.genai_client = genai.Client(
                 vertexai=True,
-                project="gen-lang-client-0207694487",
+                project=chosen_project,
                 location="us-central1"
             )
-            
-            # Initialize Storage client
-            self.storage_client = storage.Client()
+
+            # Initialize Storage client using validated credentials
+            self.storage_client = storage.Client(credentials=creds, project=adc_project)
             
             print("✅ All clients initialized successfully")
             return True
